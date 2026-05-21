@@ -10,9 +10,6 @@ from app.routers import auth, admin, owner
 from app.models.base import Base
 from app.models.gym import Gym, GymRole, SubscriptionStatus
 
-# IMPORTANT
-from app.auth.jwt import hash_password
-
 scheduler = AsyncIOScheduler()
 
 
@@ -135,14 +132,14 @@ async def create_admin():
 
             existing_admin = (
                 await db.execute(
-                    select(Gym).where(Gym.username == "adminfinal")
+                    select(Gym).where(Gym.username == "gymowner")
                 )
             ).scalar_one_or_none()
 
             if existing_admin:
                 return {
                     "message": "Admin already exists",
-                    "username": "adminfinal",
+                    "username": "gymowner",
                     "password": "admin123"
                 }
 
@@ -152,11 +149,11 @@ async def create_admin():
                 phone="7060000406",
                 city="Saharanpur",
 
-                # NEW CLEAN USERNAME
-                username="adminfinal",
+                # FINAL USERNAME
+                username="gujjar",
 
-                # HASHED PASSWORD
-                password=hash_password("admin123"),
+                # PRE-HASHED PASSWORD FOR: admin123
+                password="$2b$12$KIXQ4jY0V5Jx0g0E7Y1Q4eL5Q7jK8wYlJ6xN0Jv7R2xW0bYk4eM7G",
 
                 role=GymRole.admin,
                 subscription_status=SubscriptionStatus.active,
@@ -171,7 +168,7 @@ async def create_admin():
 
             return {
                 "message": "Admin created successfully",
-                "username": "adminfinal",
+                "username": "gujjar",
                 "password": "admin123"
             }
 
