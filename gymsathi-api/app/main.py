@@ -150,7 +150,7 @@ async def create_admin():
                 phone="7060000406",
                 city="Saharanpur",
                 username="prince",
-                password=hash_password("@18Minshu"),
+                password=hash_password("admin123"),
                 role=GymRole.admin,
                 subscription_status=SubscriptionStatus.active,
                 is_active=True
@@ -165,7 +165,7 @@ async def create_admin():
             return {
                 "message": "Admin created successfully",
                 "username": "prince",
-                "password": "@18Minshu"
+                "password": "admin123"
             }
 
         except Exception as e:
