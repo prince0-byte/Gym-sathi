@@ -5,8 +5,9 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select
 
 from app.config import settings
-from app.database import AsyncSessionLocal
+from app.database import AsyncSessionLocal, engine
 from app.routers import auth, admin, owner
+from app.models.base import Base
 from app.models.gym import Gym, GymRole, SubscriptionStatus
 
 scheduler = AsyncIOScheduler()
@@ -15,6 +16,7 @@ scheduler = AsyncIOScheduler()
 async def run_daily_jobs():
     async with AsyncSessionLocal() as db:
         try:
+
             from app.services.subscription_service import (
                 run_subscription_reminder_engine,
                 send_daily_admin_summary,
@@ -55,6 +57,17 @@ async def run_daily_jobs():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+
+    # ====================================
+    # AUTO CREATE DATABASE TABLES
+    # ====================================
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    # ====================================
+    # START SCHEDULER
+    # ====================================
 
     scheduler.add_job(
         run_daily_jobs,
