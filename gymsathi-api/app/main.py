@@ -10,6 +10,9 @@ from app.routers import auth, admin, owner
 from app.models.base import Base
 from app.models.gym import Gym, GymRole, SubscriptionStatus
 
+# NEW IMPORT
+from app.auth.jwt import hash_password
+
 scheduler = AsyncIOScheduler()
 
 
@@ -132,7 +135,7 @@ async def create_admin():
 
             existing_admin = (
                 await db.execute(
-                    select(Gym).where(Gym.role == GymRole.admin)
+                    select(Gym).where(Gym.username == "admin2")
                 )
             ).scalar_one_or_none()
 
@@ -146,8 +149,8 @@ async def create_admin():
                 owner_name="Prince Rathi",
                 phone="7060000406",
                 city="Saharanpur",
-                username="admin",
-                password="@18Minshu",
+                username="prince",
+                password=hash_password("@18Minshu"),
                 role=GymRole.admin,
                 subscription_status=SubscriptionStatus.active,
                 is_active=True
@@ -161,7 +164,7 @@ async def create_admin():
 
             return {
                 "message": "Admin created successfully",
-                "username": "admin",
+                "username": "prince",
                 "password": "@18Minshu"
             }
 
