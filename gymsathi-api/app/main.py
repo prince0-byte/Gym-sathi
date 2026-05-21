@@ -7,7 +7,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.routers import auth, admin, owner
-from app.models.gym import Gym
+from app.models.gym import Gym, GymRole, SubscriptionStatus
 
 scheduler = AsyncIOScheduler()
 
@@ -23,7 +23,7 @@ async def run_daily_jobs():
 
             admin_gym = (
                 await db.execute(
-                    select(Gym).where(Gym.role == "admin")
+                    select(Gym).where(Gym.role == GymRole.admin)
                 )
             ).scalar_one_or_none()
 
@@ -115,35 +115,47 @@ async def create_admin():
 
     async with AsyncSessionLocal() as db:
 
-        existing_admin = (
-            await db.execute(
-                select(Gym).where(Gym.role == "admin")
-            )
-        ).scalar_one_or_none()
+        try:
 
-        if existing_admin:
+            existing_admin = (
+                await db.execute(
+                    select(Gym).where(Gym.role == GymRole.admin)
+                )
+            ).scalar_one_or_none()
+
+            if existing_admin:
+                return {
+                    "message": "Admin already exists"
+                }
+
+            admin = Gym(
+                name="GymSathi",
+                owner_name="Prince Rathi",
+                phone="7060000406",
+                city="Saharanpur",
+                username="admin",
+                password="@18Minshu",
+                role=GymRole.admin,
+                subscription_status=SubscriptionStatus.active,
+                is_active=True
+            )
+
+            db.add(admin)
+
+            await db.commit()
+
+            await db.refresh(admin)
+
             return {
-                "message": "Admin already exists"
+                "message": "Admin created successfully",
+                "username": "admin",
+                "password": "@18Minshu"
             }
 
-        admin = Gym(
-            name="GymSathi",
-            owner_name="Prince Rathi",
-            phone="7060000406",
-            city="Saharanpur",
-            username="admin",
-            password="@18Minshu",
-            role="admin",
-            subscription_status="active",
-            is_active=True
-        )
+        except Exception as e:
 
-        db.add(admin)
+            await db.rollback()
 
-        await db.commit()
-
-        return {
-            "message": "Admin created successfully",
-            "username": "admin",
-            "password": "@18Minshu"
-        }
+            return {
+                "error": str(e)
+            }
