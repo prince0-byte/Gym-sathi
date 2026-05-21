@@ -10,6 +10,9 @@ from app.routers import auth, admin, owner
 from app.models.base import Base
 from app.models.gym import Gym, GymRole, SubscriptionStatus
 
+# IMPORTANT
+from app.auth.jwt import hash_password
+
 scheduler = AsyncIOScheduler()
 
 
@@ -58,9 +61,16 @@ async def run_daily_jobs():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
 
-    # AUTO CREATE TABLES
+    # ====================================
+    # AUTO CREATE DATABASE TABLES
+    # ====================================
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # ====================================
+    # START SCHEDULER
+    # ====================================
 
     scheduler.add_job(
         run_daily_jobs,
@@ -125,14 +135,14 @@ async def create_admin():
 
             existing_admin = (
                 await db.execute(
-                    select(Gym).where(Gym.username == "prince")
+                    select(Gym).where(Gym.username == "adminfinal")
                 )
             ).scalar_one_or_none()
 
             if existing_admin:
                 return {
                     "message": "Admin already exists",
-                    "username": "prince",
+                    "username": "adminfinal",
                     "password": "admin123"
                 }
 
@@ -141,10 +151,12 @@ async def create_admin():
                 owner_name="Prince Rathi",
                 phone="7060000406",
                 city="Saharanpur",
-                username="prince1",
 
-                # PRE-HASHED PASSWORD = admin123
-                password="$2b$12$0dHO062fqQlFfQ6FUWMp6uM9M5D6QyYJ6Q4mQ0Y9K1F4V9hA7Q6kW",
+                # NEW CLEAN USERNAME
+                username="adminfinal",
+
+                # HASHED PASSWORD
+                password=hash_password("admin123"),
 
                 role=GymRole.admin,
                 subscription_status=SubscriptionStatus.active,
@@ -159,7 +171,7 @@ async def create_admin():
 
             return {
                 "message": "Admin created successfully",
-                "username": "prince1",
+                "username": "adminfinal",
                 "password": "admin123"
             }
 
