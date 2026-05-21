@@ -60,33 +60,39 @@ async def health():
 @app.post("/setup", tags=["Setup"])
 async def setup_admin(body: dict, db: AsyncSession = Depends(get_db)):
     """One-time admin setup. Automatically disabled once admin exists."""
-    existing = (await db.execute(
-        select(Gym).where(Gym.role == GymRole.admin)
-    )).scalar_one_or_none()
+    try:
+        existing = (await db.execute(
+            select(Gym).where(Gym.role == GymRole.admin)
+        )).scalar_one_or_none()
 
-    if existing:
-        raise HTTPException(status_code=403, detail="Setup already done. Admin exists.")
+        if existing:
+            raise HTTPException(status_code=403, detail="Setup already done. Admin exists.")
 
-    for field in ["username", "password", "name", "owner_name", "phone", "city"]:
-        if not body.get(field):
-            raise HTTPException(status_code=400, detail=f"Field '{field}' required")
+        for field in ["username", "password", "name", "owner_name", "city"]:
+            if not body.get(field):
+                raise HTTPException(status_code=400, detail=f"Field '{field}' required")
 
-    phone = body["phone"]
-    if len(phone) == 10:
-        phone = "91" + phone
+        phone = str(body.get("phone", ""))
+        if len(phone) == 10:
+            phone = "91" + phone
 
-    new_admin = Gym(
-        name=body["name"],
-        owner_name=body["owner_name"],
-        phone=phone,
-        city=body["city"],
-        username=body["username"],
-        password=hash_password(body["password"]),
-        role=GymRole.admin,
-        subscription_status=SubscriptionStatus.active,
-        whatsapp_mode=WhatsappMode.admin,
-        is_active=True
-    )
-    db.add(new_admin)
-    await db.commit()
-    return {"message": f"Admin '{body['username']}' created successfully!"}
+        new_admin = Gym(
+            name=body["name"],
+            owner_name=body["owner_name"],
+            phone=phone,
+            city=body["city"],
+            username=body["username"],
+            password=hash_password(body["password"]),
+            role=GymRole.admin,
+            subscription_status=SubscriptionStatus.active,
+            whatsapp_mode=WhatsappMode.admin,
+            is_active=True
+        )
+        db.add(new_admin)
+        await db.commit()
+        return {"message": f"Admin '{body['username']}' created successfully!"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
