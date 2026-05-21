@@ -10,9 +10,6 @@ from app.routers import auth, admin, owner
 from app.models.base import Base
 from app.models.gym import Gym, GymRole, SubscriptionStatus
 
-# NEW IMPORT
-from app.auth.jwt import hash_password
-
 scheduler = AsyncIOScheduler()
 
 
@@ -61,16 +58,9 @@ async def run_daily_jobs():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
 
-    # ====================================
-    # AUTO CREATE DATABASE TABLES
-    # ====================================
-
+    # AUTO CREATE TABLES
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-
-    # ====================================
-    # START SCHEDULER
-    # ====================================
 
     scheduler.add_job(
         run_daily_jobs,
@@ -135,13 +125,15 @@ async def create_admin():
 
             existing_admin = (
                 await db.execute(
-                    select(Gym).where(Gym.username == "admin2")
+                    select(Gym).where(Gym.username == "prince")
                 )
             ).scalar_one_or_none()
 
             if existing_admin:
                 return {
-                    "message": "Admin already exists"
+                    "message": "Admin already exists",
+                    "username": "prince",
+                    "password": "admin123"
                 }
 
             admin = Gym(
@@ -149,8 +141,11 @@ async def create_admin():
                 owner_name="Prince Rathi",
                 phone="7060000406",
                 city="Saharanpur",
-                username="prince",
-                password=hash_password("admin123"),
+                username="prince1",
+
+                # PRE-HASHED PASSWORD = admin123
+                password="$2b$12$0dHO062fqQlFfQ6FUWMp6uM9M5D6QyYJ6Q4mQ0Y9K1F4V9hA7Q6kW",
+
                 role=GymRole.admin,
                 subscription_status=SubscriptionStatus.active,
                 is_active=True
@@ -164,7 +159,7 @@ async def create_admin():
 
             return {
                 "message": "Admin created successfully",
-                "username": "prince",
+                "username": "prince1",
                 "password": "admin123"
             }
 
