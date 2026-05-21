@@ -9,12 +9,7 @@ from app.database import AsyncSessionLocal
 from app.routers import auth, admin, owner
 from app.models.gym import Gym
 
-# NEW IMPORTS
-from passlib.context import CryptContext
-
 scheduler = AsyncIOScheduler()
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 async def run_daily_jobs():
@@ -36,7 +31,11 @@ async def run_daily_jobs():
                 print("No admin account found")
                 return
 
-            await run_subscription_reminder_engine(db, admin_gym.id)
+            await run_subscription_reminder_engine(
+                db,
+                admin_gym.id
+            )
+
             await send_daily_admin_summary(
                 db,
                 admin_gym.id,
@@ -56,6 +55,7 @@ async def run_daily_jobs():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+
     scheduler.add_job(
         run_daily_jobs,
         "cron",
@@ -106,9 +106,9 @@ async def health():
     }
 
 
-# =========================
+# ====================================
 # TEMP ADMIN CREATE ROUTE
-# =========================
+# ====================================
 
 @app.get("/create-admin")
 async def create_admin():
@@ -127,13 +127,14 @@ async def create_admin():
             }
 
         admin = Gym(
-            gym_name="GymSathi",
+            name="GymSathi",
             owner_name="Prince Rathi",
             phone="7060000406",
-            city="Lucknow",
+            city="Saharanpur",
             username="admin",
-            password_hash=pwd_context.hash("@18Minshu"),
+            password="@18Minshu",
             role="admin",
+            subscription_status="active",
             is_active=True
         )
 
