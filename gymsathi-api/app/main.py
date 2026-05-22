@@ -57,6 +57,30 @@ async def root():
 async def health():
     return {"status": "healthy"}
 
+@app.post("/reset-admin-password", tags=["Setup"])
+async def reset_admin_password(body: dict, db: AsyncSession = Depends(get_db)):
+    """Reset password for existing admin."""
+    try:
+        result = await db.execute(select(Gym).where(Gym.role == GymRole.admin))
+        admin = result.scalars().first()
+
+        if not admin:
+            raise HTTPException(status_code=404, detail="No admin found")
+
+        new_password = body.get("password")
+        if not new_password:
+            raise HTTPException(status_code=400, detail="'password' required")
+
+        admin.password = hash_password(new_password)
+        await db.commit()
+        return {"message": f"Password reset for admin '{admin.username}' successfully!"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/setup", tags=["Setup"])
 async def setup_admin(body: dict, db: AsyncSession = Depends(get_db)):
     """One-time admin setup. Automatically disabled once admin exists."""
