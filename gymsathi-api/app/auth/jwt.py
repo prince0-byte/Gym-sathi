@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 
 from app.config import settings
 
@@ -11,20 +11,17 @@ from app.config import settings
 # PASSWORD HASHING
 # ====================================
 
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto",
-    bcrypt__rounds=12
-)
-
-
 def hash_password(plain: str) -> str:
-    return pwd_context.hash(str(plain))
+    password_bytes = plain[:72].encode("utf-8")
+    hashed = bcrypt.hashpw(password_bytes, bcrypt.gensalt(rounds=12))
+    return hashed.decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     try:
-        return pwd_context.verify(str(plain), str(hashed))
+        password_bytes = plain[:72].encode("utf-8")
+        hashed_bytes = hashed.encode("utf-8")
+        return bcrypt.checkpw(password_bytes, hashed_bytes)
     except Exception:
         return False
 
@@ -34,12 +31,10 @@ def verify_password(plain: str, hashed: str) -> bool:
 # ====================================
 
 def _make_token(data: dict, expires: timedelta) -> str:
-
     payload = {
         **data,
         "exp": datetime.now(timezone.utc) + expires
     }
-
     return jwt.encode(
         payload,
         settings.SECRET_KEY,
@@ -48,59 +43,45 @@ def _make_token(data: dict, expires: timedelta) -> str:
 
 
 def create_access_token(gym_id: int, role: str) -> str:
-
     return _make_token(
         {
             "sub": str(gym_id),
             "role": role,
             "type": "access"
         },
-        timedelta(
-            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-        )
+        timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
 
 
 def create_refresh_token(gym_id: int) -> str:
-
     return _make_token(
         {
             "sub": str(gym_id),
             "type": "refresh"
         },
-        timedelta(
-            days=settings.REFRESH_TOKEN_EXPIRE_DAYS
-        )
+        timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     )
 
 
 def decode_access_token(token: str) -> Optional[dict]:
-
     try:
-
         payload = jwt.decode(
             token,
             settings.SECRET_KEY,
             algorithms=[settings.ALGORITHM]
         )
-
         return payload if payload.get("type") == "access" else None
-
     except JWTError:
         return None
 
 
 def decode_refresh_token(token: str) -> Optional[dict]:
-
     try:
-
         payload = jwt.decode(
             token,
             settings.SECRET_KEY,
             algorithms=[settings.ALGORITHM]
         )
-
         return payload if payload.get("type") == "refresh" else None
-
     except JWTError:
         return None
