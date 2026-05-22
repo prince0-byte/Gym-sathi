@@ -61,12 +61,14 @@ async def health():
 async def setup_admin(body: dict, db: AsyncSession = Depends(get_db)):
     """One-time admin setup. Automatically disabled once admin exists."""
     try:
-        existing = (await db.execute(
-            select(Gym).where(Gym.role == GymRole.admin)
-        )).scalar_one_or_none()
+        result = await db.execute(select(Gym).where(Gym.role == GymRole.admin))
+        existing = result.scalars().first()
 
         if existing:
-            raise HTTPException(status_code=403, detail="Setup already done. Admin exists.")
+            raise HTTPException(
+                status_code=403,
+                detail=f"Setup already done. Admin '{existing.username}' exists. Use that to login."
+            )
 
         for field in ["username", "password", "name", "owner_name", "city"]:
             if not body.get(field):
