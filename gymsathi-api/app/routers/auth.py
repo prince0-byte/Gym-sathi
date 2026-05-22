@@ -12,7 +12,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 @router.post("/login", response_model=TokenResponse)
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Gym).where(Gym.username == body.username))
-    gym = result.scalars().first()  # FIX: scalar_one_or_none ki jagah first()
+    gym = result.scalar_one_or_none()
     if not gym or not verify_password(body.password, gym.password):
         raise HTTPException(status_code=401, detail="Invalid username or password")
     if not gym.is_active:
@@ -37,7 +37,7 @@ async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
     result = await db.execute(select(Gym).where(Gym.id == int(payload["sub"])))
-    gym = result.scalars().first()  # FIX: scalar_one_or_none ki jagah first()
+    gym = result.scalar_one_or_none()
     if not gym or not gym.is_active:
         raise HTTPException(status_code=401, detail="Account not found")
     return TokenResponse(
