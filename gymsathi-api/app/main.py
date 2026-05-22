@@ -57,45 +57,16 @@ async def root():
 async def health():
     return {"status": "healthy"}
 
-@app.post("/reset-admin-password", tags=["Setup"])
-async def reset_admin_password(body: dict, db: AsyncSession = Depends(get_db)):
-    """Reset password for existing admin."""
-    try:
-        result = await db.execute(select(Gym).where(Gym.role == GymRole.admin))
-        admin = result.scalars().first()
-
-        if not admin:
-            raise HTTPException(status_code=404, detail="No admin found")
-
-        new_password = body.get("password")
-        if not new_password:
-            raise HTTPException(status_code=400, detail="'password' required")
-
-        import bcrypt
-        password_bytes = new_password[:72].encode("utf-8")
-        hashed = bcrypt.hashpw(password_bytes, bcrypt.gensalt(rounds=12))
-        admin.password = hashed.decode("utf-8")
-        await db.commit()
-        return {"message": f"Password reset for admin '{admin.username}' successfully!"}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @app.post("/setup", tags=["Setup"])
 async def setup_admin(body: dict, db: AsyncSession = Depends(get_db)):
     """One-time admin setup. Automatically disabled once admin exists."""
     try:
-        result = await db.execute(select(Gym).where(Gym.role == GymRole.admin))
-        existing = result.scalars().first()
+        existing = (await db.execute(
+            select(Gym).where(Gym.role == GymRole.admin)
+        )).scalar_one_or_none()
 
         if existing:
-            raise HTTPException(
-                status_code=403,
-                detail=f"Setup already done. Admin '{existing.username}' exists. Use that to login."
-            )
+            raise HTTPException(status_code=403, detail="Setup already done. Admin exists.")
 
         for field in ["username", "password", "name", "owner_name", "city"]:
             if not body.get(field):
