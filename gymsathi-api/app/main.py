@@ -71,7 +71,10 @@ async def reset_admin_password(body: dict, db: AsyncSession = Depends(get_db)):
         if not new_password:
             raise HTTPException(status_code=400, detail="'password' required")
 
-        admin.password = hash_password(new_password)
+        import bcrypt
+        password_bytes = new_password[:72].encode("utf-8")
+        hashed = bcrypt.hashpw(password_bytes, bcrypt.gensalt(rounds=12))
+        admin.password = hashed.decode("utf-8")
         await db.commit()
         return {"message": f"Password reset for admin '{admin.username}' successfully!"}
 
