@@ -17,9 +17,7 @@ async def run_daily_jobs():
         try:
             from app.services.subscription_service import (
                 run_subscription_reminder_engine, send_daily_admin_summary, send_expired_list_all_owners)
-            from app.services.sheet_service import sync_google_sheet
-
-            admin_gym = (await db.execute(select(Gym).where(Gym.role == GymRole.admin))).scalars().first()
+            admin_gym = (await db.execute(select(Gym).where(Gym.role == "admin"))).scalar_one_or_none()
             if not admin_gym:
                 print("No admin account found")
                 return
@@ -27,23 +25,12 @@ async def run_daily_jobs():
             await send_daily_admin_summary(db, admin_gym.id, admin_gym.phone)
             await send_expired_list_all_owners(db, admin_gym.id)
             print("Daily jobs completed")
-
-            # Sheet sync for all owners
-            owners = (await db.execute(
-                select(Gym).where(Gym.role == GymRole.owner)
-            )).scalars().all()
-            for owner_gym in owners:
-                if owner_gym.sheet_url:
-                    result = await sync_google_sheet(db, owner_gym.id, owner_gym.sheet_url)
-                    print(f"Sheet sync for {owner_gym.name}: {result}")
-            print("Sheet sync completed")
-
         except Exception as e:
             print(f"Daily job error: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    scheduler.add_job(run_daily_jobs, "interval", minutes=60, id="daily_jobs")  # Testing: 2 min, baad mein cron hour=9 kar dena
+    scheduler.add_job(run_daily_jobs, "cron", hour=9, minute=0, id="daily_jobs")
     scheduler.start()
     yield
     scheduler.shutdown()
@@ -70,55 +57,16 @@ async def root():
 async def health():
     return {"status": "healthy"}
 
-@app.get("/check-admin", tags=["Setup"])
-async def check_admin(db: AsyncSession = Depends(get_db)):
-    """Check all admin accounts in database."""
-    try:
-        result = await db.execute(select(Gym).where(Gym.role == GymRole.admin))
-        admins = result.scalars().all()
-        return [{"id": a.id, "username": a.username, "phone": a.phone, "is_active": a.is_active} for a in admins]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/reset-admin-password", tags=["Setup"])
-async def reset_admin_password(body: dict, db: AsyncSession = Depends(get_db)):
-    """Reset password for a specific admin by username."""
-    try:
-        username = body.get("username")
-        new_password = body.get("password")
-
-        if not username:
-            raise HTTPException(status_code=400, detail="'username' required")
-        if not new_password:
-            raise HTTPException(status_code=400, detail="'password' required")
-
-        result = await db.execute(select(Gym).where(Gym.username == username))
-        admin_user = result.scalar_one_or_none()
-
-        if not admin_user:
-            raise HTTPException(status_code=404, detail=f"No user found with username '{username}'")
-
-        admin_user.password = hash_password(new_password)
-        await db.commit()
-        return {"message": f"Password reset for '{username}' successfully!"}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.post("/setup", tags=["Setup"])
 async def setup_admin(body: dict, db: AsyncSession = Depends(get_db)):
     """One-time admin setup. Automatically disabled once admin exists."""
     try:
-        result = await db.execute(select(Gym).where(Gym.role == GymRole.admin))
-        existing = result.scalars().first()
+        existing = (await db.execute(
+            select(Gym).where(Gym.role == GymRole.admin)
+        )).scalar_one_or_none()
 
         if existing:
-            raise HTTPException(
-                status_code=403,
-                detail=f"Setup already done. Admin '{existing.username}' exists. Use that to login."
-            )
+            raise HTTPException(status_code=403, detail="Setup already done. Admin exists.")
 
         for field in ["username", "password", "name", "owner_name", "city"]:
             if not body.get(field):
