@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -9,6 +10,20 @@ from app.services.whatsapp_service import send_whatsapp_message
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
+
+def _get_gspread_client():
+    import gspread
+    from oauth2client.service_account import ServiceAccountCredentials
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+    if creds_json:
+        creds_dict = json.loads(creds_json)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        return gspread.authorize(creds)
+    if os.path.exists(CREDENTIALS_PATH):
+        creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_PATH, scope)
+        return gspread.authorize(creds)
+    return None
 
 async def sync_google_sheet(db: AsyncSession, gym_id: int, sheet_url: str) -> dict:
     try:
@@ -21,29 +36,15 @@ async def sync_google_sheet(db: AsyncSession, gym_id: int, sheet_url: str) -> di
         client = _get_gspread_client()
     except Exception as e:
         return {"error": f"Credentials error: {str(e)}"}
-    
+
     if not client:
-        return {"error": "Google credentials not found."}
-    
+        return {"error": "Google credentials not found. Set GOOGLE_CREDENTIALS_JSON env variable."}
+
     try:
         records = client.open_by_url(sheet_url).sheet1.get_all_records()
     except Exception as e:
         return {"error": f"Sheet open error: {str(e)}"}
-        
-        
 
-async def sync_google_sheet(db: AsyncSession, gym_id: int, sheet_url: str) -> dict:
-    try:
-        import gspread
-        from oauth2client.service_account import ServiceAccountCredentials
-    except ImportError:
-        return {"error": "gspread not installed"}
-    if not os.path.exists(CREDENTIALS_PATH):
-        return {"error": "credentials.json not found"}
-    scope  = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds  = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_PATH, scope)
-    client = gspread.authorize(creds)
-    records = client.open_by_url(sheet_url).sheet1.get_all_records()
     added, skipped = 0, 0
     for row in records:
         name      = str(row.get("name", "")).strip()
@@ -64,11 +65,16 @@ async def sync_google_sheet(db: AsyncSession, gym_id: int, sheet_url: str) -> di
             fees_amount = float(row.get("fees_amount", 1000))
         except Exception:
             fees_amount = 1000.0
-        existing = (await db.execute(select(Member).where(Member.phone == phone, Member.gym_id == gym_id))).scalar_one_or_none()
+        existing = (await db.execute(
+            select(Member).where(Member.phone == phone, Member.gym_id == gym_id)
+        )).scalar_one_or_none()
         if existing:
             old_expiry = existing.expiry_date
-            existing.name = name; existing.plan_name = plan_name
-            existing.join_date = join_date; existing.expiry_date = expiry_date; existing.fees_amount = fees_amount
+            existing.name = name
+            existing.plan_name = plan_name
+            existing.join_date = join_date
+            existing.expiry_date = expiry_date
+            existing.fees_amount = fees_amount
             await db.commit()
             if old_expiry and expiry_date > old_expiry and existing.last_renewal_notified != expiry_date:
                 msg = f"Membership Renewed!\nHi {name},\nValid Till: {expiry_date}\nKeep training! 💪"
@@ -76,8 +82,11 @@ async def sync_google_sheet(db: AsyncSession, gym_id: int, sheet_url: str) -> di
                 existing.last_renewal_notified = expiry_date
                 await db.commit()
         else:
-            db.add(Member(gym_id=gym_id, name=name, phone=phone, plan_name=plan_name,
-                          join_date=join_date, expiry_date=expiry_date, fees_amount=fees_amount, status=MemberStatus.active))
+            db.add(Member(
+                gym_id=gym_id, name=name, phone=phone, plan_name=plan_name,
+                join_date=join_date, expiry_date=expiry_date,
+                fees_amount=fees_amount, status=MemberStatus.active
+            ))
             await db.commit()
         added += 1
     return {"added_or_updated": added, "skipped": skipped}
