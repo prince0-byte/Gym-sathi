@@ -43,7 +43,7 @@ async def run_daily_jobs():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    scheduler.add_job(run_daily_jobs, "interval", minutes=2, id="daily_jobs")  # Testing: 2 min, baad mein cron hour=9 kar dena
+    scheduler.add_job(run_daily_jobs, "interval", minutes=60, id="daily_jobs")  # Testing: 2 min, baad mein cron hour=9 kar dena
     scheduler.start()
     yield
     scheduler.shutdown()
