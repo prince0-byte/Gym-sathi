@@ -17,6 +17,8 @@ async def run_daily_jobs():
         try:
             from app.services.subscription_service import (
                 run_subscription_reminder_engine, send_daily_admin_summary, send_expired_list_all_owners)
+            from app.services.sheet_service import sync_google_sheet
+
             admin_gym = (await db.execute(select(Gym).where(Gym.role == GymRole.admin))).scalars().first()
             if not admin_gym:
                 print("No admin account found")
@@ -25,12 +27,23 @@ async def run_daily_jobs():
             await send_daily_admin_summary(db, admin_gym.id, admin_gym.phone)
             await send_expired_list_all_owners(db, admin_gym.id)
             print("Daily jobs completed")
+
+            # Sheet sync for all owners
+            owners = (await db.execute(
+                select(Gym).where(Gym.role == GymRole.owner)
+            )).scalars().all()
+            for owner_gym in owners:
+                if owner_gym.sheet_url:
+                    result = await sync_google_sheet(db, owner_gym.id, owner_gym.sheet_url)
+                    print(f"Sheet sync for {owner_gym.name}: {result}")
+            print("Sheet sync completed")
+
         except Exception as e:
             print(f"Daily job error: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    scheduler.add_job(run_daily_jobs, "cron", hour=9, minute=0, id="daily_jobs")
+    scheduler.add_job(run_daily_jobs, "interval", minutes=2, id="daily_jobs")  # Testing: 2 min, baad mein cron hour=9 kar dena
     scheduler.start()
     yield
     scheduler.shutdown()
