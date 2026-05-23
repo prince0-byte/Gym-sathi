@@ -1,4 +1,6 @@
 import os
+import json
+import tempfile
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -10,17 +12,38 @@ from app.services.whatsapp_service import send_whatsapp_message
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
 
+def _get_gspread_client():
+    """credentials.json file se ya environment variable se load karo."""
+    import gspread
+    from oauth2client.service_account import ServiceAccountCredentials
+
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+
+    # Pehle environment variable check karo
+    creds_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+    if creds_json:
+        creds_dict = json.loads(creds_json)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        return gspread.authorize(creds)
+
+    # Fallback: file se load karo
+    if os.path.exists(CREDENTIALS_PATH):
+        creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_PATH, scope)
+        return gspread.authorize(creds)
+
+    return None
+
 async def sync_google_sheet(db: AsyncSession, gym_id: int, sheet_url: str) -> dict:
     try:
         import gspread
         from oauth2client.service_account import ServiceAccountCredentials
     except ImportError:
         return {"error": "gspread not installed"}
-    if not os.path.exists(CREDENTIALS_PATH):
-        return {"error": "credentials.json not found"}
-    scope  = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds  = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_PATH, scope)
-    client = gspread.authorize(creds)
+
+    client = _get_gspread_client()
+    if not client:
+        return {"error": "Google credentials not found. Set GOOGLE_CREDENTIALS_JSON environment variable."}
+
     records = client.open_by_url(sheet_url).sheet1.get_all_records()
     added, skipped = 0, 0
     for row in records:
