@@ -27,69 +27,78 @@ def _get_gspread_client():
 
 async def sync_google_sheet(db: AsyncSession, gym_id: int, sheet_url: str) -> dict:
     try:
-        import gspread
-        from oauth2client.service_account import ServiceAccountCredentials
-    except ImportError:
-        return {"error": "gspread not installed"}
-
-    try:
-        client = _get_gspread_client()
-    except Exception as e:
-        return {"error": f"Credentials error: {str(e)}"}
-
-    if not client:
-        return {"error": "Google credentials not found. Set GOOGLE_CREDENTIALS_JSON env variable."}
-
-    try:
-        records = client.open_by_url(sheet_url).sheet1.get_all_records()
-    except Exception as e:
-        return {"error": f"Sheet open error: {str(e)}"}
-
-    added, skipped = 0, 0
-    for row in records:
-        name      = str(row.get("name", "")).strip()
-        phone_raw = str(row.get("phone", "")).strip()
-        plan_name = str(row.get("plan_name", "monthly")).strip() or "monthly"
-        if not name or not phone_raw or not phone_raw.isdigit() or len(phone_raw) != 10:
-            skipped += 1
-            continue
-        phone = "91" + phone_raw
-        expiry_date = indian_to_iso(str(row.get("expiry_date", "")).strip())
-        if not expiry_date:
-            skipped += 1
-            continue
-        join_raw  = str(row.get("join_date", "")).strip()
-        join_date = indian_to_iso(join_raw) if join_raw else (
-            (datetime.strptime(expiry_date, "%Y-%m-%d") - timedelta(days=30)).strftime("%Y-%m-%d"))
         try:
-            fees_amount = float(row.get("fees_amount", 1000))
-        except Exception:
-            fees_amount = 1000.0
-        existing = (await db.execute(
-            select(Member).where(Member.phone == phone, Member.gym_id == gym_id)
-        )).scalar_one_or_none()
-        if existing:
-            old_expiry = existing.expiry_date
-            existing.name = name
-            existing.plan_name = plan_name
-            existing.join_date = join_date
-            existing.expiry_date = expiry_date
-            existing.fees_amount = fees_amount
-            await db.commit()
-            if old_expiry and expiry_date > old_expiry and existing.last_renewal_notified != expiry_date:
-                msg = f"Membership Renewed!\nHi {name},\nValid Till: {expiry_date}\nKeep training! 💪"
-                await send_whatsapp_message(db, gym_id, phone, msg)
-                existing.last_renewal_notified = expiry_date
-                await db.commit()
-        else:
-            db.add(Member(
-                gym_id=gym_id, name=name, phone=phone, plan_name=plan_name,
-                join_date=join_date, expiry_date=expiry_date,
-                fees_amount=fees_amount, status=MemberStatus.active
-            ))
-            await db.commit()
-        added += 1
-    return {"added_or_updated": added, "skipped": skipped}
+            import gspread
+            from oauth2client.service_account import ServiceAccountCredentials
+        except ImportError:
+            return {"error": "gspread not installed"}
+
+        try:
+            client = _get_gspread_client()
+        except Exception as e:
+            return {"error": f"Credentials error: {str(e)}"}
+
+        if not client:
+            return {"error": "Google credentials not found. Set GOOGLE_CREDENTIALS_JSON env variable."}
+
+        try:
+            records = client.open_by_url(sheet_url).sheet1.get_all_records()
+        except Exception as e:
+            return {"error": f"Sheet open error: {str(e)}"}
+
+        added, skipped = 0, 0
+        for row in records:
+            try:
+                name      = str(row.get("name", "")).strip()
+                phone_raw = str(row.get("phone", "")).strip()
+                plan_name = str(row.get("plan_name", "monthly")).strip() or "monthly"
+                if not name or not phone_raw or not phone_raw.isdigit() or len(phone_raw) != 10:
+                    skipped += 1
+                    continue
+                phone = "91" + phone_raw
+                expiry_date = indian_to_iso(str(row.get("expiry_date", "")).strip())
+                if not expiry_date:
+                    skipped += 1
+                    continue
+                join_raw  = str(row.get("join_date", "")).strip()
+                join_date = indian_to_iso(join_raw) if join_raw else (
+                    (datetime.strptime(expiry_date, "%Y-%m-%d") - timedelta(days=30)).strftime("%Y-%m-%d"))
+                try:
+                    fees_amount = float(row.get("fees_amount", 1000))
+                except Exception:
+                    fees_amount = 1000.0
+                existing = (await db.execute(
+                    select(Member).where(Member.phone == phone, Member.gym_id == gym_id)
+                )).scalar_one_or_none()
+                if existing:
+                    old_expiry = existing.expiry_date
+                    existing.name = name
+                    existing.plan_name = plan_name
+                    existing.join_date = join_date
+                    existing.expiry_date = expiry_date
+                    existing.fees_amount = fees_amount
+                    await db.commit()
+                    if old_expiry and expiry_date > old_expiry and existing.last_renewal_notified != expiry_date:
+                        msg = f"Membership Renewed!\nHi {name},\nValid Till: {expiry_date}\nKeep training! 💪"
+                        await send_whatsapp_message(db, gym_id, phone, msg)
+                        existing.last_renewal_notified = expiry_date
+                        await db.commit()
+                else:
+                    db.add(Member(
+                        gym_id=gym_id, name=name, phone=phone, plan_name=plan_name,
+                        join_date=join_date, expiry_date=expiry_date,
+                        fees_amount=fees_amount, status=MemberStatus.active
+                    ))
+                    await db.commit()
+                added += 1
+            except Exception as row_err:
+                skipped += 1
+                continue
+
+        return {"added_or_updated": added, "skipped": skipped}
+
+    except Exception as e:
+        return {"error": f"Unexpected error: {str(e)}"}
 
 async def save_sheet_url(db: AsyncSession, gym_id: int, sheet_url: str) -> bool:
     gym = (await db.execute(select(Gym).where(Gym.id == gym_id))).scalar_one_or_none()
