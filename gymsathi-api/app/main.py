@@ -52,7 +52,7 @@ async def run_sheet_sync():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     scheduler.add_job(run_daily_jobs, "cron", hour=9, minute=0, id="daily_jobs")
-    scheduler.add_job(run_sheet_sync, "interval", minutes=30, id="sheet_sync")
+    scheduler.add_job(run_sheet_sync, "interval", minutes=5, id="sheet_sync")
     scheduler.start()
     yield
     scheduler.shutdown()
